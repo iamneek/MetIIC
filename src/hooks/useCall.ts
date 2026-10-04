@@ -1,0 +1,236 @@
+import { useEffect, useRef, useState } from 'react'
+import type { RealtimeChannel } from '@supabase/supabase-js'
+import { supabase } from '../lib/supabase'
+import { buildIceServers, CONNECTION_TIMEOUT_MS, ICE_TRANSPORT_POLICY } from '../lib/config'
+import { parseSignal } from '../lib/signaling'
+import type { CallRole } from './useMatchmaking'
+
+export type UiCallState =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'failed'
+  | 'ended'
+
+export interface CallError {
+  message: string
+}
+
+interface UseCallArgs {
+  callId: string | null
+  role: CallRole | null
+  localStream: MediaStream | null
+  callDbStatus: string | null
+  onRemoteStream: (s: MediaStream | null) => void
+  onRemoteEnded: () => void
+}
+
+/**
+ * Owns one RTCPeerConnection + one private signaling channel for a single call.
+ * All signaling is authorized server-side by realtime RLS policies on
+ * realtime.messages plus the call-participant check, and every message is
+ * validated and scoped to the current callId (a stale channel from a previous
+ * call is fully torn down before a new one is opened).
+ */
+export function useCall({
+  callId,
+  role,
+  localStream,
+  callDbStatus,
+  onRemoteStream,
+  onRemoteEnded,
+}: UseCallArgs): { uiState: UiCallState; error: CallError | null; sendEnd: () => void } {
+  const [uiState, setUiState] = useState<UiCallState>('idle')
+  const [error, setError] = useState<CallError | null>(null)
+  const pcRef = useRef<RTCPeerConnection | null>(null)
+  const channelRef = useRef<RealtimeChannel | null>(null)
+  const remoteStreamRef = useRef<MediaStream | null>(null)
+  const sendEndRef = useRef<() => void>(() => {})
+  // callbacks via refs to avoid re-running the lifecycle effect
+  const onRemoteStreamRef = useRef(onRemoteStream)
+  const onRemoteEndedRef = useRef(onRemoteEnded)
+  onRemoteStreamRef.current = onRemoteStream
+  onRemoteEndedRef.current = onRemoteEnded
+
+  useEffect(() => {
+    if (!callId || !role) {
+      setUiState('idle')
+      return
+    }
+    let cancelled = false
+    setError(null)
+    setUiState('connecting')
+
+    const remote = new MediaStream()
+    remoteStreamRef.current = remote
+    onRemoteStreamRef.current(remote)
+
+    const pc = new RTCPeerConnection({
+      iceServers: buildIceServers(),
+      iceTransportPolicy: ICE_TRANSPORT_POLICY,
+    })
+    pcRef.current = pc
+
+    if (localStream) {
+      for (const track of localStream.getTracks()) pc.addTrack(track, localStream)
+    }
+
+    pc.ontrack = (e) => {
+      const ms = e.streams[0]
+      if (ms) {
+        for (const t of ms.getTracks()) remote.addTrack(t)
+      } else {
+        remote.addTrack(e.track)
+      }
+      if (!cancelled) setUiState('connected')
+    }
+
+    pc.onconnectionstatechange = () => {
+      if (cancelled) return
+      if (pc.connectionState === 'connected') setUiState('connected')
+      else if (pc.connectionState === 'disconnected') setUiState('reconnecting')
+      else if (pc.connectionState === 'failed') {
+        try {
+          pc.restartIce()
+        } catch {
+          /* not supported everywhere */
+        }
+        setError({ message: 'Connection lost. Trying to reconnect…' })
+      } else if (pc.connectionState === 'closed') {
+        setUiState('ended')
+      }
+    }
+
+    let offerSent = false
+    let remoteDescSet = false
+    const pendingCandidates: RTCIceCandidateInit[] = []
+
+    const channel = supabase.channel(`call:${callId}`, {
+      config: { private: true },
+    })
+    channelRef.current = channel
+
+    const send = (payload: unknown) => {
+      void channel.send({ type: 'broadcast', event: 'signal', payload })
+    }
+
+    sendEndRef.current = () => send({ type: 'end', reason: 'user' })
+
+    const flushCandidates = async () => {
+      const queued = pendingCandidates.splice(0)
+      for (const c of queued) {
+        try {
+          await pc.addIceCandidate(c)
+        } catch {
+          /* stale candidate, ignore */
+        }
+      }
+    }
+
+    channel.on('broadcast', { event: 'signal' }, async ({ payload }) => {
+      const msg = parseSignal(payload)
+      if (!msg || cancelled) return
+      try {
+        if (msg.type === 'end') {
+          onRemoteEndedRef.current()
+          return
+        }
+        if (msg.type === 'ready') {
+          if (role === 'initiator' && !offerSent && pc.signalingState === 'stable' && !remoteDescSet) {
+            offerSent = true
+            const offer = await pc.createOffer()
+            await pc.setLocalDescription(offer)
+            send({ type: 'offer', sdp: pc.localDescription })
+          }
+          return
+        }
+        if (msg.type === 'offer' && msg.sdp) {
+          if (remoteDescSet && pc.signalingState !== 'stable') return // ignore duplicates
+          await pc.setRemoteDescription(msg.sdp)
+          remoteDescSet = true
+          await flushCandidates()
+          const answer = await pc.createAnswer()
+          await pc.setLocalDescription(answer)
+          send({ type: 'answer', sdp: pc.localDescription })
+          return
+        }
+        if (msg.type === 'answer' && msg.sdp) {
+          if (remoteDescSet) return // duplicate answer
+          await pc.setRemoteDescription(msg.sdp)
+          remoteDescSet = true
+          await flushCandidates()
+          return
+        }
+        if (msg.type === 'ice') {
+          if (!remoteDescSet) {
+            if (msg.candidate) pendingCandidates.push(msg.candidate)
+            return
+          }
+          try {
+            await pc.addIceCandidate(msg.candidate ?? null)
+          } catch {
+            /* ignore individual bad candidates */
+          }
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('signaling error', err)
+      }
+    })
+
+    pc.onicecandidate = (e) => {
+      send({ type: 'ice', candidate: e.candidate ? e.candidate.toJSON() : null })
+    }
+
+    const timeout = setTimeout(() => {
+      if (cancelled) return
+      setUiState((s) => {
+        if (s === 'connecting' || s === 'reconnecting') {
+          setError({
+            message:
+              'Could not establish a connection in time. This is often caused by restrictive networks — ask your administrator about TURN, or press Next to try again.',
+          })
+          return 'failed'
+        }
+        return s
+      })
+    }, CONNECTION_TIMEOUT_MS)
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED' && !cancelled) {
+        // Tell the peer we are ready; the initiator will offer on receipt.
+        send({ type: 'ready' })
+      }
+    })
+
+    return () => {
+      cancelled = true
+      clearTimeout(timeout)
+      pc.onicecandidate = null
+      pc.ontrack = null
+      pc.onconnectionstatechange = null
+      pcRef.current = null
+      channelRef.current = null
+      try {
+        pc.close()
+      } catch {
+        /* ignore */
+      }
+      void supabase.removeChannel(channel)
+      onRemoteStreamRef.current(null)
+      remoteStreamRef.current = null
+    }
+  }, [callId, role, localStream])
+
+  // Remote hangup / ended via database (e.g., other user ended from another tab).
+  useEffect(() => {
+    if (callDbStatus === 'ended' || callDbStatus === 'failed') {
+      setUiState('ended')
+    }
+  }, [callDbStatus])
+
+  const sendEnd = () => sendEndRef.current()
+
+  return { uiState, error, sendEnd }
+}
