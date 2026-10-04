@@ -220,7 +220,7 @@ export function ChatPage() {
         <div className="max-w-md text-center">
           <h1 className="text-2xl font-semibold">Verify your email</h1>
           <p className="mt-3 text-sm text-ink/70">
-            We sent a verification link to your @iic.com.np address. Verify it, then sign in again.
+            We sent a verification link to your @iic.edu.np address. Verify it, then sign in again.
           </p>
           <button
             className="mt-5 rounded-full border border-ink/15 px-4 py-2 text-sm"

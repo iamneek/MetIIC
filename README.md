@@ -1,6 +1,6 @@
 # Campus Connect
 
-Anonymous, one-on-one random video chat for verified `@iic.com.np` students.
+Anonymous, one-on-one random video chat for verified `@iic.edu.np` students.
 React + TypeScript + Vite + Tailwind frontend, Supabase (Auth/Postgres/Realtime)
 for accounts, matchmaking, and WebRTC signaling, and direct browser-to-browser
 WebRTC for media.
@@ -31,7 +31,7 @@ npm run build               # production build into dist/
 6. Copy Project URL and `anon` public key into `.env`.
 7. Never use the `service_role` key anywhere in the frontend.
 
-The database itself rejects signups whose email is not exactly `@iic.com.np`
+The database itself rejects signups whose email is not exactly `@iic.edu.np`
 (database trigger on `auth.users`, case-insensitive), and `matchmake()` rejects
 unverified or suspended accounts — so forging API calls cannot bypass the
 domain restriction.

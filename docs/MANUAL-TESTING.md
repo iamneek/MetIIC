@@ -1,7 +1,7 @@
 # Manual two-browser testing checklist
 
 Automated camera testing is not practical; use two real browser profiles (or
-one real browser + one incognito), each with its own verified `@iic.com.np`
+one real browser + one incognito), each with its own verified `@iic.edu.np`
 account, on the same network if possible, and ideally behind typical home NATs.
 
 ## Setup
@@ -12,8 +12,8 @@ account, on the same network if possible, and ideally behind typical home NATs.
 ## Gatekeeping
 
 - [ ] Sign-up with `student@gmail.com` is rejected with a clear message.
-- [ ] Sign-up with `student@fakeiic.com.np` / `...@iic.com.np.attacker.com` is rejected.
-- [ ] Directly POSTing a signup for a non-iic.com.np email fails (DB trigger).
+- [ ] Sign-up with `student@fakeiic.edu.np` / `...@iic.edu.np.attacker.com` is rejected.
+- [ ] Directly POSTing a signup for a non-iic.edu.np email fails (DB trigger).
 - [ ] An unverified account signing in is told to verify email; calling `matchmake` fails.
 
 ## Matchmaking & call

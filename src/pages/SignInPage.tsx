@@ -16,7 +16,7 @@ export function SignInPage() {
     e.preventDefault()
     setError(null)
     if (!isAllowedEmail(email)) {
-      setError('Only @iic.com.np email addresses can sign in.')
+      setError('Only @iic.edu.np email addresses can sign in.')
       return
     }
     setBusy(true)

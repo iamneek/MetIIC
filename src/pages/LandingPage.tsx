@@ -9,10 +9,10 @@ export function LandingPage() {
       </header>
       <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 pb-16 text-center">
         <h1 className="max-w-xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-          Meet a fellow iic.com.np student, anonymously.
+          Meet a fellow iic.edu.np student, anonymously.
         </h1>
         <p className="max-w-md text-base text-ink/60">
-          Random one-on-one video chat, restricted to verified @iic.com.np students. No profiles,
+          Random one-on-one video chat, restricted to verified @iic.edu.np students. No profiles,
           no recordings, no sharing of your email.
         </p>
         <div className="flex gap-3">

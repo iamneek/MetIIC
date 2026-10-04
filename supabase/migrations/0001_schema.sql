@@ -8,8 +8,8 @@ security definer
 set search_path = public, auth
 as $$
 begin
-  if new.email is null or lower(split_part(new.email, '@', 2)) <> 'iic.com.np' then
-    raise exception 'domain_not_allowed: only @iic.com.np addresses are permitted';
+  if new.email is null or lower(split_part(new.email, '@', 2)) <> 'iic.edu.np' then
+    raise exception 'domain_not_allowed: only @iic.edu.np addresses are permitted';
   end if;
   return new;
 end;

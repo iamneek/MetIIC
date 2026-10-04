@@ -63,6 +63,6 @@ All signaling is validated client-side (`src/lib/signaling.ts`). To inspect:
 
 ## Domain restriction errors
 
-- `only @iic.com.np addresses...` — client-side check.
+- `only @iic.edu.np addresses...` — client-side check.
 - `domain_not_allowed` — database trigger; fired even if the client check is
   bypassed, so a direct API signup is also rejected.

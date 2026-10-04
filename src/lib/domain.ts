@@ -1,7 +1,7 @@
-export const ALLOWED_DOMAIN = 'iic.com.np'
+export const ALLOWED_DOMAIN = 'iic.edu.np'
 
 /**
- * Returns true only for a single-part local address @ exactly iic.com.np,
+ * Returns true only for a single-part local address @ exactly iic.edu.np,
  * case-insensitively. Rejects lookalike domains, trailing junk, whitespace,
  * and multi-@ addresses.
  */
@@ -17,7 +17,7 @@ export function isAllowedEmail(email: string): boolean {
 }
 
 export function emailValidationMessage(email: string): string | null {
-  if (!email.trim()) return 'Enter your iic.com.np email address.'
+  if (!email.trim()) return 'Enter your iic.edu.np email address.'
   if (!isAllowedEmail(email)) {
     return `Only addresses ending in @${ALLOWED_DOMAIN} are allowed (e.g. student@${ALLOWED_DOMAIN}).`
   }
