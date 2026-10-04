@@ -275,6 +275,7 @@ export function ChatPage() {
             stream={phase === 'inCall' ? remoteStream : null}
             placeholder={phase === 'waiting' ? 'waiting' : 'partner'}
             label="Remote video"
+            mirror
             className="h-full w-full"
           />
           <div className="absolute bottom-3 right-3 h-28 w-20 overflow-hidden rounded-lg shadow-lg sm:h-36 sm:w-24">
