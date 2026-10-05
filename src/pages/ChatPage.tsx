@@ -304,8 +304,8 @@ export function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col">
-      <header className="flex items-center justify-between px-4 py-3 sm:px-6">
+    <div className="flex min-h-dvh flex-col lg:h-dvh">
+      <header className="shrink-0 flex items-center justify-between px-4 py-3 sm:px-6">
         <div className="flex items-baseline gap-3">
           <h1 className="text-lg font-semibold tracking-tight">{APP_NAME}</h1>
           <span
@@ -323,9 +323,9 @@ export function ChatPage() {
         </button>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-6 sm:px-6 lg:flex-row">
-        <section className="flex min-w-0 flex-1 flex-col gap-4">
-        <div ref={videoWrapRef} className="relative aspect-video w-full overflow-hidden rounded-2xl bg-ink">
+      <main className="mx-auto flex w-full max-w-[96rem] flex-1 flex-col gap-4 px-4 pb-6 sm:px-6 lg:min-h-0 lg:flex-row">
+        <section className="flex min-w-0 flex-1 flex-col gap-4 lg:min-h-0">
+        <div ref={videoWrapRef} className="relative aspect-video w-full overflow-hidden rounded-2xl bg-ink lg:aspect-auto lg:min-h-0 lg:flex-1">
           <VideoView
             stream={phase === 'inCall' ? remoteStream : null}
             placeholder={phase === 'waiting' ? 'waiting' : 'partner'}
@@ -338,7 +338,7 @@ export function ChatPage() {
             onPointerMove={onPipPointerMove}
             onPointerUp={onPipPointerUp}
             style={pipPos ? { top: pipPos.y, left: pipPos.x } : undefined}
-            className={`absolute h-28 w-20 cursor-grab touch-none overflow-hidden rounded-lg shadow-lg active:cursor-grabbing sm:h-36 sm:w-24 ${
+            className={`absolute h-28 w-20 cursor-grab touch-none overflow-hidden rounded-lg shadow-lg active:cursor-grabbing sm:h-36 sm:w-24 xl:h-44 xl:w-32 ${
               pipPos ? '' : 'bottom-3 right-3'
             }`}
             aria-label="Your video (drag to move)"
@@ -422,13 +422,13 @@ export function ChatPage() {
         )}
         </section>
 
-        <aside className="flex w-full flex-col overflow-hidden rounded-2xl border border-ink/10 bg-white lg:w-[clamp(280px,28vw,380px)] lg:min-h-0 lg:self-stretch">
+        <aside className="flex w-full flex-col overflow-hidden rounded-2xl border border-ink/10 bg-white lg:w-[clamp(320px,26vw,440px)] lg:min-h-0">
           <div className="min-h-[200px] flex-1 space-y-2 overflow-y-auto p-4 lg:min-h-0" aria-live="polite">
             {messages.length === 0 && (
-              <p className="text-sm text-ink/40">Messages appear here during a call.</p>
+              <p className="text-base text-ink/40">Messages appear here during a call.</p>
             )}
             {messages.map((m, i) => (
-              <div key={i} className={`text-sm ${m.mine ? 'text-ink/90' : 'text-ink/70'}`}>
+              <div key={i} className={`text-base ${m.mine ? 'text-ink/90' : 'text-ink/70'}`}>
                 <span className="font-medium">{m.mine ? 'You' : 'Stranger'}:</span> {m.text}
               </div>
             ))}
@@ -443,13 +443,13 @@ export function ChatPage() {
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Type a message"
               disabled={phase !== 'inCall'}
-              className="min-w-0 flex-1 rounded-lg border border-ink/15 bg-cream px-3 py-2 text-sm disabled:opacity-50"
+              className="min-w-0 flex-1 rounded-lg border border-ink/15 bg-cream px-3 py-2.5 text-base disabled:opacity-50"
             />
             <button
               type="submit"
               disabled={phase !== 'inCall' || !draft.trim()}
               aria-label="Send message"
-              className="rounded-lg bg-ink px-3 py-2 text-sm text-cream disabled:opacity-40"
+              className="rounded-lg bg-ink px-4 py-2.5 text-base text-cream disabled:opacity-40"
             >
               Send
             </button>
