@@ -154,11 +154,17 @@ export function useCall({
           return
         }
         if (msg.type === 'ready') {
-          if (role === 'initiator' && !offerSent && pc.signalingState === 'stable' && !remoteDescSet) {
-            offerSent = true
-            const offer = await pc.createOffer()
-            await pc.setLocalDescription(offer)
-            send({ type: 'offer', sdp: pc.localDescription })
+          if (role === 'initiator') {
+            if (!offerSent && pc.signalingState === 'stable' && !remoteDescSet) {
+              offerSent = true
+              const offer = await pc.createOffer()
+              await pc.setLocalDescription(offer)
+              send({ type: 'offer', sdp: pc.localDescription })
+            }
+          } else {
+            // Re-announce readiness so a late-joining initiator receives it;
+            // broadcasts are not replayed, so without this the offer never fires.
+            if (!offerSent && !remoteDescSet) send({ type: 'ready' })
           }
           return
         }
