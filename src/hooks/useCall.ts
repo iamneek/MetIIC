@@ -3,6 +3,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { buildIceServers, CONNECTION_TIMEOUT_MS, ICE_TRANSPORT_POLICY } from '../lib/config'
 import { parseSignal } from '../lib/signaling'
+import { logDiag } from '../lib/diagnostics'
 import type { CallRole } from './useMatchmaking'
 
 export type UiCallState =
@@ -67,6 +68,7 @@ export function useCall({
     setError(null)
     setUiState('connecting')
     const restartedRef = { flag: false }
+    logDiag('call', `starting call ${callId} as ${role}; ice policy=${ICE_TRANSPORT_POLICY}`)
 
     const remote = new MediaStream()
     remoteStreamRef.current = remote
@@ -80,6 +82,12 @@ export function useCall({
 
     if (localStream) {
       for (const track of localStream.getTracks()) pc.addTrack(track, localStream)
+      logDiag(
+        'call',
+        `local tracks: ${localStream.getTracks().map((t) => `${t.kind}:${t.readyState}`).join(', ') || 'none'}`,
+      )
+    } else {
+      logDiag('call', 'no local stream available')
     }
 
     pc.ontrack = (e) => {
@@ -95,12 +103,12 @@ export function useCall({
       // the reference is unchanged, so tracks arriving after the first render would
       // otherwise never make the <video> visible.
       onRemoteStreamRef.current(new MediaStream(remote.getTracks()))
+      logDiag('call', `remote track received: ${e.track.kind} (${remote.getTracks().length} total)`)
       if (!cancelled) setUiState('connected')
     }
 
     pc.oniceconnectionstatechange = () => {
-      // eslint-disable-next-line no-console
-      console.info('[call] ice connection state:', pc.iceConnectionState)
+      logDiag('call', `ice connection state: ${pc.iceConnectionState}`)
       if (cancelled) return
       if (pc.iceConnectionState === 'failed') {
         // Full ICE restart: the initiator sends a new offer with iceRestart so a new
@@ -112,10 +120,10 @@ export function useCall({
               const offer = await pc.createOffer({ iceRestart: true })
               await pc.setLocalDescription(offer)
               offerSent = true
+              logDiag('call', 'sent ICE restart offer')
               send({ type: 'offer', sdp: pc.localDescription })
             } catch (err) {
-              // eslint-disable-next-line no-console
-              console.error('[call] ice restart failed', err)
+              logDiag('call', `ice restart failed: ${String(err)}`)
             }
           })()
         }
@@ -123,8 +131,7 @@ export function useCall({
     }
 
     pc.onconnectionstatechange = () => {
-      // eslint-disable-next-line no-console
-      console.info('[call] connection state:', pc.connectionState)
+      logDiag('call', `connection state: ${pc.connectionState}`)
       if (cancelled) return
       if (pc.connectionState === 'connected') setUiState('connected')
       else if (pc.connectionState === 'disconnected') setUiState('reconnecting')
@@ -195,12 +202,16 @@ export function useCall({
               offerSent = true
               const offer = await pc.createOffer()
               await pc.setLocalDescription(offer)
+              logDiag('call', 'sent SDP offer')
               send({ type: 'offer', sdp: pc.localDescription })
             }
           } else {
             // Re-announce readiness so a late-joining initiator receives it;
             // broadcasts are not replayed, so without this the offer never fires.
-            if (!offerSent && !remoteDescSet) send({ type: 'ready' })
+            if (!offerSent && !remoteDescSet) {
+              logDiag('call', 're-announced ready to initiator')
+              send({ type: 'ready' })
+            }
           }
           return
         }
@@ -211,6 +222,7 @@ export function useCall({
           await flushCandidates()
           const answer = await pc.createAnswer()
           await pc.setLocalDescription(answer)
+          logDiag('call', 'applied offer, sent SDP answer')
           send({ type: 'answer', sdp: pc.localDescription })
           return
         }
@@ -219,11 +231,15 @@ export function useCall({
           await pc.setRemoteDescription(msg.sdp)
           remoteDescSet = true
           await flushCandidates()
+          logDiag('call', 'applied SDP answer')
           return
         }
         if (msg.type === 'ice') {
           if (!remoteDescSet) {
-            if (msg.candidate) pendingCandidates.push(msg.candidate)
+            if (msg.candidate) {
+              pendingCandidates.push(msg.candidate)
+              logDiag('call', `buffered ICE candidate (${pendingCandidates.length})`)
+            }
             return
           }
           try {
@@ -233,17 +249,23 @@ export function useCall({
           }
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('signaling error', err)
+        logDiag('call', `signaling error: ${String(err)}`)
       }
     })
 
+    let sentCandidates = 0
     pc.onicecandidate = (e) => {
+      if (e.candidate) sentCandidates += 1
       send({ type: 'ice', candidate: e.candidate ? e.candidate.toJSON() : null })
     }
 
     const timeout = setTimeout(() => {
       if (cancelled) return
+      logDiag(
+        'call',
+        `connection timeout after ${Math.round(CONNECTION_TIMEOUT_MS / 1000)}s ` +
+          `(local candidates sent: ${sentCandidates}, ice state: ${pc.iceConnectionState})`,
+      )
       setUiState((s) => {
         if (s === 'connecting' || s === 'reconnecting') {
           setError({
@@ -257,6 +279,7 @@ export function useCall({
     }, CONNECTION_TIMEOUT_MS)
 
     channel.subscribe((status) => {
+      logDiag('call', `signaling channel status: ${status}`)
       if (status === 'SUBSCRIBED' && !cancelled) {
         // Tell the peer we are ready; the initiator will offer on receipt.
         send({ type: 'ready' })

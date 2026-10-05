@@ -10,6 +10,7 @@ import { VideoView } from '../components/VideoView'
 import { ControlBar } from '../components/ControlBar'
 import { ReportDialog } from '../components/ReportDialog'
 import { BlockConfirm } from '../components/BlockConfirm'
+import { DebugPanel } from '../components/DebugPanel'
 import { APP_NAME } from '../lib/config'
 
 type Phase = 'idle' | 'waiting' | 'inCall'
@@ -456,6 +457,8 @@ export function ChatPage() {
           </form>
         </aside>
       </main>
+
+      <DebugPanel />
 
       <ReportDialog open={showReport} onClose={() => setShowReport(false)} onSubmit={onReport} />
       <BlockConfirm open={showBlock} onCancel={() => setShowBlock(false)} onConfirm={onBlock} />
