@@ -304,7 +304,7 @@ export function ChatPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex flex-col">
       <header className="flex items-center justify-between px-4 py-3 sm:px-6">
         <div className="flex items-baseline gap-3">
           <h1 className="text-lg font-semibold tracking-tight">{APP_NAME}</h1>
@@ -323,7 +323,7 @@ export function ChatPage() {
         </button>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 pb-6 sm:px-6 lg:flex-row">
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-6 sm:px-6 lg:flex-row">
         <section className="flex min-w-0 flex-1 flex-col gap-4">
         <div ref={videoWrapRef} className="relative aspect-video w-full overflow-hidden rounded-2xl bg-ink">
           <VideoView
@@ -423,7 +423,7 @@ export function ChatPage() {
         </section>
 
         <aside className="flex w-full flex-col overflow-hidden rounded-2xl border border-ink/10 bg-white lg:w-[clamp(280px,28vw,380px)] lg:min-h-0 lg:self-stretch">
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4" aria-live="polite">
+          <div className="min-h-[200px] flex-1 space-y-2 overflow-y-auto p-4 lg:min-h-0" aria-live="polite">
             {messages.length === 0 && (
               <p className="text-sm text-ink/40">Messages appear here during a call.</p>
             )}
