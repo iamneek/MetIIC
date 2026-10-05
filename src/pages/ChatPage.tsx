@@ -325,7 +325,7 @@ export function ChatPage() {
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 pb-6 sm:px-6 lg:flex-row">
         <section className="flex min-w-0 flex-1 flex-col gap-4">
-        <div ref={videoWrapRef} className="relative aspect-video w-full overflow-hidden rounded-2xl bg-ink lg:aspect-auto lg:min-h-[58vh]">
+        <div ref={videoWrapRef} className="relative aspect-video w-full overflow-hidden rounded-2xl bg-ink">
           <VideoView
             stream={phase === 'inCall' ? remoteStream : null}
             placeholder={phase === 'waiting' ? 'waiting' : 'partner'}
@@ -405,7 +405,8 @@ export function ChatPage() {
         )}
 
         {(phase === 'inCall' || media.stream) && (
-          <ControlBar
+          <div className="rounded-2xl border border-ink/10 bg-white px-2 py-2">
+            <ControlBar
             micOn={media.micOn}
             camOn={media.camOn}
             inCall={phase === 'inCall'}
@@ -416,12 +417,13 @@ export function ChatPage() {
             onEnd={endCall}
             onReport={() => setShowReport(true)}
             onBlock={() => setShowBlock(true)}
-          />
+            />
+          </div>
         )}
         </section>
 
-        <aside className="flex w-full flex-col overflow-hidden rounded-2xl border border-ink/10 bg-white lg:w-80">
-          <div className="flex-1 space-y-2 overflow-y-auto p-4" aria-live="polite">
+        <aside className="flex w-full flex-col overflow-hidden rounded-2xl border border-ink/10 bg-white lg:w-[clamp(280px,28vw,380px)] lg:min-h-0 lg:self-stretch">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4" aria-live="polite">
             {messages.length === 0 && (
               <p className="text-sm text-ink/40">Messages appear here during a call.</p>
             )}
