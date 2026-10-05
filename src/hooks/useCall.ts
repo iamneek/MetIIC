@@ -24,6 +24,7 @@ interface UseCallArgs {
   callDbStatus: string | null
   onRemoteStream: (s: MediaStream | null) => void
   onRemoteEnded: () => void
+  onChatMessage?: (text: string) => void
 }
 
 /**
@@ -40,18 +41,22 @@ export function useCall({
   callDbStatus,
   onRemoteStream,
   onRemoteEnded,
-}: UseCallArgs): { uiState: UiCallState; error: CallError | null; sendEnd: () => void } {
+  onChatMessage,
+}: UseCallArgs): { uiState: UiCallState; error: CallError | null; sendEnd: () => void; sendChat: (text: string) => void } {
   const [uiState, setUiState] = useState<UiCallState>('idle')
   const [error, setError] = useState<CallError | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const remoteStreamRef = useRef<MediaStream | null>(null)
   const sendEndRef = useRef<() => void>(() => {})
+  const sendChatRef = useRef<(text: string) => void>(() => {})
   // callbacks via refs to avoid re-running the lifecycle effect
   const onRemoteStreamRef = useRef(onRemoteStream)
   const onRemoteEndedRef = useRef(onRemoteEnded)
+  const onChatMessageRef = useRef(onChatMessage)
   onRemoteStreamRef.current = onRemoteStream
   onRemoteEndedRef.current = onRemoteEnded
+  onChatMessageRef.current = onChatMessage
 
   useEffect(() => {
     if (!callId || !role) {
@@ -116,6 +121,18 @@ export function useCall({
     }
 
     sendEndRef.current = () => send({ type: 'end', reason: 'user' })
+    sendChatRef.current = (text: string) => {
+      const trimmed = text.trim()
+      if (!trimmed || trimmed.length > 1000) return
+      void channel.send({ type: 'broadcast', event: 'chat', payload: { text: trimmed } })
+    }
+
+    channel.on('broadcast', { event: 'chat' }, ({ payload }) => {
+      const t = (payload as { text?: unknown } | undefined)?.text
+      if (typeof t === 'string' && t.length > 0 && t.length <= 1000 && !cancelled) {
+        onChatMessageRef.current?.(t)
+      }
+    })
 
     const flushCandidates = async () => {
       const queued = pendingCandidates.splice(0)
@@ -220,6 +237,8 @@ export function useCall({
       void supabase.removeChannel(channel)
       onRemoteStreamRef.current(null)
       remoteStreamRef.current = null
+      sendEndRef.current = () => {}
+      sendChatRef.current = () => {}
     }
   }, [callId, role, localStream])
 
@@ -231,6 +250,7 @@ export function useCall({
   }, [callDbStatus])
 
   const sendEnd = () => sendEndRef.current()
+  const sendChat = (text: string) => sendChatRef.current(text)
 
-  return { uiState, error, sendEnd }
+  return { uiState, error, sendEnd, sendChat }
 }
