@@ -101,7 +101,7 @@ export function useCall({
         `local tracks: ${localStream.getTracks().map((t) => `${t.kind}:${t.readyState}`).join(', ') || 'none'}`,
       )
     } else {
-      logDiag('call', 'no local stream available')
+      logDiag('call', 'ERROR: no local stream at call start — cannot establish media. Grant camera/mic and retry.')
     }
 
     pc.ontrack = (e) => {

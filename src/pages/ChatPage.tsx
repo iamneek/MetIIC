@@ -101,12 +101,12 @@ export function ChatPage() {
     if (phase === 'idle' && profile?.email_verified) {
       void mm.recover().then((recovered) => {
         if (recovered?.kind === 'matched') {
-          setActiveCall({ callId: recovered.callId, role: recovered.role })
-          setPhase('inCall')
+          setNotice('You were in an active call that ended when the page reloaded.')
+          setActiveCall(null)
         } else if (recovered?.kind === 'waiting') {
-          // Re-arm queue watchers (heartbeat/poll) and re-add our queue row.
-          setPhase('waiting')
-          void mm.start()
+          setNotice('You were waiting in the queue when the page reloaded. Please start again.')
+        } else {
+          setNotice(null)
         }
       })
     }
@@ -123,21 +123,24 @@ export function ChatPage() {
     }
   }, [])
 
+  const ensureLocalStream = useCallback(async () => {
+    if (media.stream) return true
+    const stream = await media.start()
+    return stream !== null
+  }, [media])
+
   const startChat = useCallback(async () => {
     setNotice(null)
     enteringRef.current = true
-    let stream = media.stream
-    if (!stream) {
-      stream = (await media.start()) ?? null
-      if (!stream) {
-        enteringRef.current = false
-        return
-      }
+    const ok = await ensureLocalStream()
+    if (!ok) {
+      enteringRef.current = false
+      return
     }
     setPhase('waiting')
     await mm.start()
     enteringRef.current = false
-  }, [media, mm])
+  }, [ensureLocalStream, mm])
 
   const cancelWaiting = useCallback(async () => {
     await mm.cancel()
@@ -175,10 +178,17 @@ export function ChatPage() {
     if (callId) await supabase.rpc('end_call', { p_call_id: callId })
     setPhase('waiting')
     enteringRef.current = true
+    const ok = await ensureLocalStream()
+    if (!ok) {
+      enteringRef.current = false
+      setPhase('idle')
+      setBusy(false)
+      return
+    }
     await mm.start()
     enteringRef.current = false
     setBusy(false)
-  }, [activeCall, busy, mm, sendEnd])
+  }, [activeCall, busy, mm, sendEnd, ensureLocalStream])
 
   const onBlock = useCallback(async () => {
     setShowBlock(false)
