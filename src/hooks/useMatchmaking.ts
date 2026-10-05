@@ -10,8 +10,8 @@ export type MatchmakingState =
   | { kind: 'matched'; callId: string; role: CallRole }
   | { kind: 'error'; message: string }
 
-const POLL_MS = 4000
-const HEARTBEAT_MS = 15000
+const POLL_MS = 8000
+const HEARTBEAT_MS = 25000
 
 function friendlyRpcError(message: string): string {
   const m = message.toLowerCase()

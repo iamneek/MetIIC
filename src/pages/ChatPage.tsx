@@ -140,14 +140,14 @@ export function ChatPage() {
     }
   }, [activeCall?.callId, phase])
 
-  // Track realtime connection health.
+  // Track realtime connection health without creating extra subscription channels.
   useEffect(() => {
-    const ch = supabase.channel('healthcheck').subscribe((s) => {
-      setServerConnected(s === 'SUBSCRIBED')
-    })
-    return () => {
-      void supabase.removeChannel(ch)
+    const updateStatus = () => {
+      setServerConnected(supabase.realtime.isConnected())
     }
+    updateStatus()
+    const timer = setInterval(updateStatus, 3000)
+    return () => clearInterval(timer)
   }, [])
 
   const ensureLocalStream = useCallback(async () => {

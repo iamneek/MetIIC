@@ -51,20 +51,22 @@ begin
     raise exception 'not_verified';
   end if;
 
-  -- Rate limit matchmaking attempts.
+  -- Relax rate limit to 8 per 10s so users clicking Next aren't throttled.
   select count(*) into recent from public.action_log
     where user_id = uid and action = 'matchmake'
       and created_at > now() - interval '10 seconds';
-  if recent >= 4 then
+  if recent >= 8 then
     raise exception 'slow_down';
   end if;
   insert into public.action_log (user_id, action) values (uid, 'matchmake');
 
+  -- Prune action_log older than 5 minutes so table stays tiny on Free Tier.
+  delete from public.action_log where created_at < now() - interval '5 minutes';
+
   -- Serialize this user's matchmaking operations.
   perform 1 from public.profiles where id = uid for update;
 
-  -- Auto-heal: if this user was left in an active call (e.g. reload, network drop, timeout),
-  -- end it cleanly so they can match again immediately instead of being permanently blocked.
+  -- Auto-heal: cleanly end previous active call if user reloaded/reconnected.
   if public.is_busy(uid) then
     update public.calls
     set status = 'ended', ended_at = now()
@@ -73,11 +75,17 @@ begin
     ) and status in ('matched','connecting','connected');
   end if;
 
-  -- Lazy expiry of stale calls (> 2 minutes in matched/connecting state)
+  -- Fail stale calls (> 2 minutes in matched/connecting state).
   update public.calls
   set status = 'failed', ended_at = now()
   where status in ('matched','connecting')
     and created_at < now() - interval '2 minutes';
+
+  -- Free Tier optimization: permanently purge ended/failed calls older than 5 minutes.
+  -- This cascades to public.call_participants automatically, keeping DB size near zero.
+  delete from public.calls
+  where status in ('ended', 'failed')
+    and (ended_at < now() - interval '5 minutes' or created_at < now() - interval '10 minutes');
 
   -- Lazy expiry of stale queue rows.
   delete from public.match_queue where expires_at < now();
@@ -209,6 +217,13 @@ begin
   );
 
   insert into public.action_log (user_id, action) values (auth.uid(), 'call_end');
+
+  -- Free Tier self-cleaning: purge calls ended/failed > 5 minutes ago and old action logs.
+  delete from public.calls
+  where status in ('ended', 'failed')
+    and (ended_at < now() - interval '5 minutes' or created_at < now() - interval '10 minutes');
+
+  delete from public.action_log where created_at < now() - interval '5 minutes';
 end;
 $$;
 
@@ -295,6 +310,12 @@ begin
     and created_at < now() - interval '2 minutes';
 
   delete from public.match_queue where expires_at < now() - interval '5 minutes';
+
+  delete from public.calls
+  where status in ('ended', 'failed')
+    and (ended_at < now() - interval '5 minutes' or created_at < now() - interval '10 minutes');
+
+  delete from public.action_log where created_at < now() - interval '5 minutes';
 end;
 $$;
 

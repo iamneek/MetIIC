@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -31,10 +32,25 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+function friendlyAuthError(message: string): string {
+  const m = message.toLowerCase()
+  if (m.includes('rate') || m.includes('too many') || m.includes('over_email_send_rate_limit')) {
+    return 'Rate limit reached. Please wait a few minutes before trying again.'
+  }
+  if (m.includes('email not confirmed')) {
+    return 'Please verify your email address before signing in.'
+  }
+  if (m.includes('invalid login credentials') || m.includes('invalid credentials')) {
+    return 'Invalid email or password.'
+  }
+  return message
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const lastFetchedUserRef = useRef<string | null>(null)
 
   const refreshProfile = useCallback(async () => {
     const { data, error } = await supabase.from('profiles').select('*').maybeSingle()
@@ -50,13 +66,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
-      if (data.session) void refreshProfile()
+      if (data.session?.user?.id) {
+        lastFetchedUserRef.current = data.session.user.id
+        void refreshProfile()
+      }
       setLoading(false)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s)
-      if (s) void refreshProfile()
-      else setProfile(null)
+      if (s?.user?.id) {
+        if (lastFetchedUserRef.current !== s.user.id || event === 'USER_UPDATED') {
+          lastFetchedUserRef.current = s.user.id
+          void refreshProfile()
+        }
+      } else {
+        lastFetchedUserRef.current = null
+        setProfile(null)
+      }
       setLoading(false)
     })
     return () => sub.subscription.unsubscribe()
@@ -64,12 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      if (error.message.toLowerCase().includes('email not confirmed')) {
-        return 'Please verify your email address before signing in.'
-      }
-      return error.message
-    }
+    if (error) return friendlyAuthError(error.message)
     return null
   }, [])
 
@@ -79,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
       options: { emailRedirectTo: `${window.location.origin}/chat` },
     })
-    if (error) return error.message
+    if (error) return friendlyAuthError(error.message)
     return null
   }, [])
 
@@ -87,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
     setSession(null)
     setProfile(null)
+    lastFetchedUserRef.current = null
   }, [])
 
   const resendVerification = useCallback(async (email: string) => {
@@ -95,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       options: { emailRedirectTo: `${window.location.origin}/chat` },
     })
-    return error ? error.message : null
+    return error ? friendlyAuthError(error.message) : null
   }, [])
 
   const value = useMemo(
