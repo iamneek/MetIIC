@@ -47,6 +47,13 @@ export function ChatPage() {
     void supabase.rpc('end_call', { p_call_id: activeCall?.callId })
   }, [activeCall])
 
+  const handleConnectionFailed = useCallback(() => {
+    const callId = activeCall?.callId
+    if (callId) {
+      void supabase.rpc('end_call', { p_call_id: callId })
+    }
+  }, [activeCall?.callId])
+
   const { uiState: callUi, error: callError, sendEnd, sendChat } = useCall({
     callId: activeCall?.callId ?? null,
     role: activeCall?.role ?? null,
@@ -55,6 +62,7 @@ export function ChatPage() {
     onRemoteStream: setRemoteStream,
     onRemoteEnded: handleRemoteEnded,
     onChatMessage: handleRemoteMessage,
+    onConnectionFailed: handleConnectionFailed,
   })
 
   // Move to inCall when matchmaking finds a partner.
@@ -96,15 +104,17 @@ export function ChatPage() {
     }
   }, [callDbStatus])
 
-  // Recover an in-progress call after a refresh.
+  // Recover an in-progress call after a refresh and ensure stale DB state is cleaned up.
   useEffect(() => {
     if (phase === 'idle' && profile?.email_verified) {
       void mm.recover().then((recovered) => {
         if (recovered?.kind === 'matched') {
           setNotice('You were in an active call that ended when the page reloaded.')
           setActiveCall(null)
+          void supabase.rpc('end_call', { p_call_id: recovered.callId })
         } else if (recovered?.kind === 'waiting') {
           setNotice('You were waiting in the queue when the page reloaded. Please start again.')
+          void supabase.rpc('leave_queue')
         } else {
           setNotice(null)
         }
@@ -112,6 +122,23 @@ export function ChatPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.email_verified])
+
+  // Clean up server state when closing or reloading the tab.
+  useEffect(() => {
+    const handleUnload = () => {
+      if (activeCall?.callId) {
+        void supabase.rpc('end_call', { p_call_id: activeCall.callId })
+      } else if (phase === 'waiting') {
+        void supabase.rpc('leave_queue')
+      }
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    window.addEventListener('pagehide', handleUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload)
+      window.removeEventListener('pagehide', handleUnload)
+    }
+  }, [activeCall?.callId, phase])
 
   // Track realtime connection health.
   useEffect(() => {

@@ -16,7 +16,7 @@ export function buildIceServers(): RTCIceServer[] {
   const stuns = stunRaw
     .split(',')
     .map((s) => s.trim())
-    .filter((s) => s.startsWith('stun:') || s.startsWith('turns:'))
+    .filter((s) => s.startsWith('stun:') || s.startsWith('stuns:'))
   if (stuns.length > 0) {
     servers.push({ urls: stuns })
   } else {
@@ -24,11 +24,17 @@ export function buildIceServers(): RTCIceServer[] {
   }
   const turnUrl = import.meta.env.VITE_TURN_URL
   if (turnUrl) {
-    servers.push({
-      urls: turnUrl.split(',').map((s: string) => s.trim()),
-      username: import.meta.env.VITE_TURN_USERNAME || undefined,
-      credential: import.meta.env.VITE_TURN_CREDENTIAL || undefined,
-    })
+    const urls = turnUrl
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.startsWith('turn:') || s.startsWith('turns:'))
+    if (urls.length > 0) {
+      servers.push({
+        urls,
+        username: import.meta.env.VITE_TURN_USERNAME || undefined,
+        credential: import.meta.env.VITE_TURN_CREDENTIAL || undefined,
+      })
+    }
   }
   return servers
 }

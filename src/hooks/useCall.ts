@@ -26,6 +26,7 @@ interface UseCallArgs {
   onRemoteStream: (s: MediaStream | null) => void
   onRemoteEnded: () => void
   onChatMessage?: (text: string) => void
+  onConnectionFailed?: () => void
 }
 
 /**
@@ -43,6 +44,7 @@ export function useCall({
   onRemoteStream,
   onRemoteEnded,
   onChatMessage,
+  onConnectionFailed,
 }: UseCallArgs): { uiState: UiCallState; error: CallError | null; sendEnd: () => void; sendChat: (text: string) => void } {
   const [uiState, setUiState] = useState<UiCallState>('idle')
   const [error, setError] = useState<CallError | null>(null)
@@ -55,9 +57,11 @@ export function useCall({
   const onRemoteStreamRef = useRef(onRemoteStream)
   const onRemoteEndedRef = useRef(onRemoteEnded)
   const onChatMessageRef = useRef(onChatMessage)
+  const onConnectionFailedRef = useRef(onConnectionFailed)
   onRemoteStreamRef.current = onRemoteStream
   onRemoteEndedRef.current = onRemoteEnded
   onChatMessageRef.current = onChatMessage
+  onConnectionFailedRef.current = onConnectionFailed
 
   useEffect(() => {
     if (!callId || !role) {
@@ -159,6 +163,7 @@ export function useCall({
           message:
             'The direct connection failed. This network likely needs a TURN relay — check that VITE_TURN_URL / USERNAME / CREDENTIAL are set in your host and that the site was rebuilt.',
         })
+        onConnectionFailedRef.current?.()
       } else if (pc.connectionState === 'closed') {
         setUiState('ended')
       }
@@ -194,6 +199,7 @@ export function useCall({
     const flushCandidates = async () => {
       const queued = pendingCandidates.splice(0)
       for (const c of queued) {
+        if (!c) continue
         try {
           await pc.addIceCandidate(c)
         } catch {
@@ -256,10 +262,12 @@ export function useCall({
             }
             return
           }
-          try {
-            await pc.addIceCandidate(msg.candidate ?? null)
-          } catch {
-            /* ignore individual bad candidates */
+          if (msg.candidate) {
+            try {
+              await pc.addIceCandidate(msg.candidate)
+            } catch {
+              /* ignore individual bad candidates */
+            }
           }
         }
       } catch (err) {
@@ -286,6 +294,7 @@ export function useCall({
             message:
               'Could not establish a connection in time. This is often caused by restrictive networks — ask your administrator about TURN, or press Next to try again.',
           })
+          onConnectionFailedRef.current?.()
           return 'failed'
         }
         return s

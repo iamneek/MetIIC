@@ -9,6 +9,7 @@ export interface World {
   userCall: Map<string, string>
   blocks: Set<string> // "a|b" both directions added by blockBoth
   now: number
+  callCounter?: number
 }
 
 export function blockBoth(w: World, a: string, b: string) {
@@ -20,10 +21,24 @@ export function isBlocked(w: World, a: string, b: string) {
   return w.blocks.has(`${a}|${b}`)
 }
 
-export function matchmake(w: World, uid: string): 'waiting' | { matched: string } | 'in_call' {
+export function endCall(w: World, callId: string) {
+  const call = w.calls.get(callId)
+  if (call) {
+    w.userCall.delete(call.a)
+    w.userCall.delete(call.b)
+    w.calls.delete(callId)
+  }
+}
+
+export function matchmake(w: World, uid: string): 'waiting' | { matched: string } {
   // lazy expiry
   for (const [u, q] of w.queue) if (q.expiresAt <= w.now) w.queue.delete(u)
-  if (w.userCall.has(uid)) return 'in_call'
+
+  // auto-heal: if this user was already in a call, cleanly end it
+  if (w.userCall.has(uid)) {
+    const oldCallId = w.userCall.get(uid)!
+    endCall(w, oldCallId)
+  }
 
   const partner = [...w.queue.entries()]
     .filter(
@@ -41,7 +56,8 @@ export function matchmake(w: World, uid: string): 'waiting' | { matched: string 
 
   w.queue.delete(partner[0])
   w.queue.delete(uid)
-  const id = `call-${w.calls.size + 1}`
+  w.callCounter = (w.callCounter ?? 0) + 1
+  const id = `call-${w.callCounter}`
   w.calls.set(id, { a: partner[0], b: uid, status: 'matched' })
   w.userCall.set(partner[0], id)
   w.userCall.set(uid, id)

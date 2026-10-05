@@ -52,14 +52,14 @@ describe('matchmaking pairing invariants (model of matchmake SQL)', () => {
     expect(w.calls.size).toBe(0)
   })
 
-  it('does not match users already in a call', () => {
+  it('auto-heals previous active call when rematchmaking', () => {
     const w = newWorld()
     matchmake(w, 'a')
     matchmake(w, 'b') // a+b matched
-    expect(matchmake(w, 'a')).toBe('in_call')
-    matchmake(w, 'c')
-    expect(typeof matchmake(w, 'd')).toBe('object')
-    expect(w.calls.size).toBe(2)
+    expect(matchmake(w, 'a')).toBe('waiting') // a's old call ended, a enters queue
+    expect(w.userCall.has('b')).toBe(false) // b is also freed from the ended call
+    expect(typeof matchmake(w, 'c')).toBe('object') // a+c matched
+    expect(w.calls.size).toBe(1)
   })
 
   it('expired queue entries cannot be matched', () => {

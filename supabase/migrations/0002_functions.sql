@@ -63,9 +63,21 @@ begin
   -- Serialize this user's matchmaking operations.
   perform 1 from public.profiles where id = uid for update;
 
+  -- Auto-heal: if this user was left in an active call (e.g. reload, network drop, timeout),
+  -- end it cleanly so they can match again immediately instead of being permanently blocked.
   if public.is_busy(uid) then
-    raise exception 'in_call';
+    update public.calls
+    set status = 'ended', ended_at = now()
+    where id in (
+      select call_id from public.call_participants where user_id = uid
+    ) and status in ('matched','connecting','connected');
   end if;
+
+  -- Lazy expiry of stale calls (> 2 minutes in matched/connecting state)
+  update public.calls
+  set status = 'failed', ended_at = now()
+  where status in ('matched','connecting')
+    and created_at < now() - interval '2 minutes';
 
   -- Lazy expiry of stale queue rows.
   delete from public.match_queue where expires_at < now();
@@ -280,9 +292,9 @@ begin
   update public.calls
   set status = 'failed', ended_at = now()
   where status in ('matched','connecting')
-    and created_at < now() - interval '10 minutes';
+    and created_at < now() - interval '2 minutes';
 
-  delete from public.match_queue where expires_at < now() - interval '1 hour';
+  delete from public.match_queue where expires_at < now() - interval '5 minutes';
 end;
 $$;
 
