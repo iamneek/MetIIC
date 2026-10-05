@@ -66,6 +66,7 @@ export function useCall({
     let cancelled = false
     setError(null)
     setUiState('connecting')
+    const restartedRef = { flag: false }
 
     const remote = new MediaStream()
     remoteStreamRef.current = remote
@@ -84,14 +85,46 @@ export function useCall({
     pc.ontrack = (e) => {
       const ms = e.streams[0]
       if (ms) {
-        for (const t of ms.getTracks()) remote.addTrack(t)
-      } else {
+        for (const t of ms.getTracks()) {
+          if (!remote.getTracks().includes(t)) remote.addTrack(t)
+        }
+      } else if (!remote.getTracks().includes(e.track)) {
         remote.addTrack(e.track)
       }
+      // Hand over a NEW MediaStream reference: React bails out of re-renders when
+      // the reference is unchanged, so tracks arriving after the first render would
+      // otherwise never make the <video> visible.
+      onRemoteStreamRef.current(new MediaStream(remote.getTracks()))
       if (!cancelled) setUiState('connected')
     }
 
+    pc.oniceconnectionstatechange = () => {
+      // eslint-disable-next-line no-console
+      console.info('[call] ice connection state:', pc.iceConnectionState)
+      if (cancelled) return
+      if (pc.iceConnectionState === 'failed') {
+        // Full ICE restart: the initiator sends a new offer with iceRestart so a new
+        // candidate pair (ideally via TURN) is negotiated.
+        if (role === 'initiator' && !restartedRef.flag) {
+          restartedRef.flag = true
+          void (async () => {
+            try {
+              const offer = await pc.createOffer({ iceRestart: true })
+              await pc.setLocalDescription(offer)
+              offerSent = true
+              send({ type: 'offer', sdp: pc.localDescription })
+            } catch (err) {
+              // eslint-disable-next-line no-console
+              console.error('[call] ice restart failed', err)
+            }
+          })()
+        }
+      }
+    }
+
     pc.onconnectionstatechange = () => {
+      // eslint-disable-next-line no-console
+      console.info('[call] connection state:', pc.connectionState)
       if (cancelled) return
       if (pc.connectionState === 'connected') setUiState('connected')
       else if (pc.connectionState === 'disconnected') setUiState('reconnecting')
@@ -101,7 +134,10 @@ export function useCall({
         } catch {
           /* not supported everywhere */
         }
-        setError({ message: 'Connection lost. Trying to reconnect…' })
+        setError({
+          message:
+            'The direct connection failed. This network likely needs a TURN relay — check that VITE_TURN_URL / USERNAME / CREDENTIAL are set in your host and that the site was rebuilt.',
+        })
       } else if (pc.connectionState === 'closed') {
         setUiState('ended')
       }
