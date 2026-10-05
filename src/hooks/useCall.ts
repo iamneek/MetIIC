@@ -92,10 +92,22 @@ export function useCall({
     remoteStreamRef.current = remote
     onRemoteStreamRef.current(remote)
 
-    const pc = new RTCPeerConnection({
-      iceServers,
-      iceTransportPolicy: ICE_TRANSPORT_POLICY,
-    })
+    let pc: RTCPeerConnection
+    try {
+      pc = new RTCPeerConnection({
+        iceServers,
+        iceTransportPolicy: ICE_TRANSPORT_POLICY,
+      })
+    } catch (pcErr) {
+      logDiag(
+        'call',
+        `ERROR initializing RTCPeerConnection with configured ICE servers: ${String(pcErr)}. Falling back to public STUN.`,
+      )
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+        iceTransportPolicy: 'all',
+      })
+    }
     pcRef.current = pc
 
     if (localStream) {
