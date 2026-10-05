@@ -68,14 +68,28 @@ export function useCall({
     setError(null)
     setUiState('connecting')
     const restartedRef = { flag: false }
-    logDiag('call', `starting call ${callId} as ${role}; ice policy=${ICE_TRANSPORT_POLICY}`)
+
+    const iceServers = buildIceServers()
+    logDiag(
+      'call',
+      `starting call ${callId} as ${role}; ice policy=${ICE_TRANSPORT_POLICY}; ` +
+        `iceServers=[${iceServers
+          .map((s) => `${(Array.isArray(s.urls) ? s.urls.join('+') : s.urls)}`)
+          .join(' | ')}]; turn credentials configured=${iceServers.some((s) => !!s.username)}`,
+    )
+    if (!iceServers.some((s) => (Array.isArray(s.urls) ? s.urls.join() : s.urls).startsWith('turn'))) {
+      logDiag(
+        'call',
+        'WARNING: no TURN server configured. Peer-to-peer will fail between different networks.',
+      )
+    }
 
     const remote = new MediaStream()
     remoteStreamRef.current = remote
     onRemoteStreamRef.current(remote)
 
     const pc = new RTCPeerConnection({
-      iceServers: buildIceServers(),
+      iceServers,
       iceTransportPolicy: ICE_TRANSPORT_POLICY,
     })
     pcRef.current = pc
